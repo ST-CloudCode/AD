@@ -1,0 +1,146 @@
+##Steps to Deploy Active Directory Services on Azure Using PowerShell
+###Task 1: Set Up a Virtual Network and Subnet
+
+Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+Login to Azure
+Authenticate with your Azure account:
+Connect-AzAccount
+
+Create a Resource Group
+$resourceGroupName = "myADResourceGroup"
+$location = "EastUS"
+
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+
+Set up a virtual network and subnet for the AD deployment:
+$vnetName = "myVNet"
+$subnetName = "mySubnet"
+
+$vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName `
+                             -Location $location `
+                             -Name $vnetName `
+                             -AddressPrefix "10.0.0.0/16"
+
+$subnet = Add-AzVirtualNetworkSubnetConfig -Name $subnetName `
+                                            -AddressPrefix "10.0.1.0/24" `
+                                            -VirtualNetwork $vnet
+
+$vnet | Set-AzVirtualNetwork
+
+### Task 2: Deploy a Virtual Machine for Active Directory
+
+Create a Virtual Machine
+
+Deploy a Windows Server VM where Active Directory Domain Services (AD DS) will be installed:
+$vmName = "myADVM"
+$adminUsername = "azureuser"
+$adminPassword = "Password1234!"
+$nicName = "myNic"
+$publicIpName = "myPublicIP"
+
+# Create Public IP Address
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName `
+                      -Name $publicIpName `
+                      -Location $location `
+                      -AllocationMethod Static
+
+# Create Network Interface
+$publicIp = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName
+$nic = New-AzNetworkInterface -ResourceGroupName $resourceGroupName `
+                               -Location $location `
+                               -Name $nicName `
+                               -SubnetId $vnet.Subnets[0].Id `
+                               -PublicIpAddressId $publicIp.Id
+
+# Create Virtual Machine
+New-AzVM -ResourceGroupName $resourceGroupName `
+          -Location $location `
+          -Name $vmName `
+          -VirtualNetworkId $vnet.Id `
+          -SubnetId $vnet.Subnets[0].Id `
+          -NetworkInterfaceId $nic.Id `
+          -ImageName "Win2022Datacenter" `
+          -Size "Standard_DS2_v2" `
+          -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+
+Connect to the Virtual Machine
+Use RDP or another method to connect to the VM.
+
+### Task 3: Install and Configure Active Directory Domain Services (AD DS)
+
+Install Active Directory Domain Services
+On the VM, open PowerShell as an administrator and run:
+Install-WindowsFeature AD-Domain-Services
+Promote the Server to a Domain Controller
+
+Configure the domain controller by running:
+$domainName = "contoso.local"
+$safeModePassword = "SafeModePassword123!"
+
+Install-ADDSForest -DomainName $domainName `
+                    -DomainNetbiosName "CONTOSO" `
+                    -ForestMode "Win2016" `
+                    -DomainMode "Win2016" `
+                    -InstallDns `
+                    -CreateDnsDelegation:$false `
+                    -NoRebootOnCompletion:$false `
+                    -SafeModeAdministratorPassword (ConvertTo-SecureString $safeModePassword -AsPlainText -Force)
+
+This command will configure the server as the first domain controller in a new forest.
+
+Verify Active Directory Installation
+After the server restarts, verify that Active Directory is working:
+Get-ADDomain
+Get-ADForest
+
+# Deploy-ActiveDirectory.ps1
+
+# Install Azure PowerShell module
+Install-Module -Name Az -AllowClobber -Force
+
+# Connect to Azure
+Connect-AzAccount
+
+# Set Azure subscription context
+Set-AzContext -SubscriptionId <your-subscription-id>
+
+# Variables
+$resourceGroupName = "myADResourceGroup"
+$location = "EastUS"
+$vnetName = "myVNet"
+$subnetName = "mySubnet"
+$publicIpName = "myPublicIP"
+$nicName = "myNic"
+$vmName = "myADVM"
+$adminUsername = "azureuser"
+$adminPassword = "Password1234!"
+$domainName = "contoso.local"
+$safeModePassword = "SafeModePassword123!"
+
+# Create Resource Group
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+
+# Create Virtual Network and Subnet
+$vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $vnetName -AddressPrefix "10.0.0.0/16"
+$subnet = Add-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix "10.0.1.0/24" -VirtualNetwork $vnet
+$vnet | Set-AzVirtualNetwork
+
+# Create Public IP Address
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName -Location $location -AllocationMethod Static
+
+# Create Network Interface
+$publicIp = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName
+$nic = New-AzNetworkInterface -ResourceGroupName $resourceGroupName -Location $location -Name $nicName -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $publicIp.Id
+
+# Create Virtual Machine
+New-AzVM -ResourceGroupName $resourceGroupName -Location $location -Name $vmName -VirtualNetworkId $vnet.Id -SubnetId $vnet.Subnets[0].Id -NetworkInterfaceId $nic.Id -ImageName "Win2022Datacenter" -Size "Standard_DS2_v2" -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+
+# Connect to VM and Install AD DS
+$session = New-PSSession -ComputerName $vmName -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    Install-WindowsFeature AD-Domain-Services
+    Install-ADDSForest -DomainName "contoso.local" -DomainNetbiosName "CONTOSO" -ForestMode "Win2016" -DomainMode "Win2016" -InstallDns -CreateDnsDelegation:$false -NoRebootOnCompletion:$false -SafeModeAdministratorPassword (ConvertTo-SecureString "SafeModePassword123!" -AsPlainText -Force)
+}
+Remove-PSSession $session

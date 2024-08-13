@@ -1,0 +1,126 @@
+##Steps to Implement Group Policy and Manage User Settings with Group Policy on Azure Using PowerShell
+###Task 1: Set Up Azure Active Directory Domain Services (Azure AD DS)Install Azure PowerShell Module
+
+Ensure you have the Azure PowerShell module installed:
+Install-Module -Name Az -AllowClobber -Force
+
+Login to Azure
+Authenticate with your Azure account:
+Connect-AzAccount
+
+Create a Resource Group
+$resourceGroupName = "myADDSResourceGroup"
+$location = "EastUS"
+
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+Deploy Azure AD DS
+
+If Azure AD DS is not yet deployed, follow these steps:
+$aadDomainServiceName = "myAADDomainService"
+$vnetName = "myADDSVNet"
+$subnetName = "myADDSSubnet"
+
+New-AzADDomainService -ResourceGroupName $resourceGroupName `
+                       -Name $aadDomainServiceName `
+                       -Location $location `
+                       -DomainName "contoso.com" `
+                       -VnetId "/subscriptions/<subscription-id>/resourceGroups/$resourceGroupName/providers/Microsoft.Network/virtualNetworks/$vnetName" `
+                       -SubnetId "/subscriptions/<subscription-id>/resourceGroups/$resourceGroupName/providers/Microsoft.Network/virtualNetworks/$vnetName/subnets/$subnetName"
+
+### Task 2: Configure Group Policy Objects (GPOs)
+
+Make sure the Group Policy Management module is installed on your local machine:
+Install-WindowsFeature -Name GPMC
+
+Connect to the Domain Controller
+If you're running these commands from a remote machine, ensure you're connected to the domain controller:
+$domainController = "yourdomaincontroller.contoso.com"
+$cred = Get-Credential
+Enter-PSSession -ComputerName $domainController -Credential $cred
+
+Create a New Group Policy Object (GPO)
+Import-Module GroupPolicy
+
+$gpoName = "UserSettingsPolicy"
+$gpo = New-GPO -Name $gpoName -Domain "contoso.com"
+
+Configure specific settings in the GPO:
+# Configure password policies
+Set-GPRegistryValue -Name $gpoName -Key "HKLM\Software\Policies\Microsoft\Windows\System" -ValueName "EnableLUA" -Type DWord -Value 1
+
+# Configure user profile settings
+Set-GPRegistryValue -Name $gpoName -Key "HKLM\Software\Policies\Microsoft\Windows\Control Panel\Desktop" -ValueName "Wallpaper" -Type String -Value "C:\Windows\Web\Wallpaper\Solid Colors\Blue.jpg"
+
+Link the GPO to an Organizational Unit (OU)
+$ouDistinguishedName = "OU=Employees,DC=contoso,DC=com"
+New-GPLink -Name $gpoName -Target $ouDistinguishedName
+
+Ensure the GPO is applied:
+Invoke-GPUpdate -Force
+
+### Task 3: Manage User Settings with Group Policy
+
+Configure user-specific settings within the GPO:
+# Configure logon script
+Set-GPRegistryValue -Name $gpoName -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" -ValueName "MyLogonScript" -Type String -Value "C:\Scripts\LogonScript.bat"
+
+# Configure user folder redirection
+Set-GPRegistryValue -Name $gpoName -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" -ValueName "MyDocuments" -Type ExpandString -Value "%HOMEDRIVE%%HOMEPATH%\Documents"
+
+Ensure the GPO is applied correctly by testing on a user machine:
+gpresult /r
+
+# Setup-AzureADDS.ps1
+
+# Connect to Azure
+Connect-AzAccount
+
+# Variables
+$resourceGroupName = "myADDSResourceGroup"
+$location = "EastUS"
+$aadDomainServiceName = "myAADDomainService"
+$vnetName = "myADDSVNet"
+$subnetName = "myADDSSubnet"
+
+# Deploy Azure AD DS
+New-AzADDomainService -ResourceGroupName $resourceGroupName `
+                       -Name $aadDomainServiceName `
+                       -Location $location `
+                       -DomainName "contoso.com" `
+                       -VnetId "/subscriptions/<subscription-id>/resourceGroups/$resourceGroupName/providers/Microsoft.Network/virtualNetworks/$vnetName" `
+                       -SubnetId "/subscriptions/<subscription-id>/resourceGroups/$resourceGroupName/providers/Microsoft.Network/virtualNetworks/$vnetName/subnets/$subnetName"
+
+# Configure-GPOs.ps1
+
+# Import Group Policy module
+Import-Module GroupPolicy
+
+# Variables
+$gpoName = "UserSettingsPolicy"
+$domain = "contoso.com"
+$ouDistinguishedName = "OU=Employees,DC=contoso,DC=com"
+
+# Create a new GPO
+$gpo = New-GPO -Name $gpoName -Domain $domain
+
+# Configure GPO settings
+Set-GPRegistryValue -Name $gpoName -Key "HKLM\Software\Policies\Microsoft\Windows\System" -ValueName "EnableLUA" -Type DWord -Value 1
+Set-GPRegistryValue -Name $gpoName -Key "HKLM\Software\Policies\Microsoft\Windows\Control Panel\Desktop" -ValueName "Wallpaper" -Type String -Value "C:\Windows\Web\Wallpaper\Solid Colors\Blue.jpg"
+
+# Link GPO to OU
+New-GPLink -Name $gpoName -Target $ouDistinguishedName
+
+# Manage-UserSettings.ps1
+
+# Import Group Policy module
+Import-Module GroupPolicy
+
+# Variables
+$gpoName = "UserSettingsPolicy"
+
+# Configure user settings
+Set-GPRegistryValue -Name $gpoName -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" -ValueName "MyLogonScript" -Type String -Value "C:\Scripts\LogonScript.bat"
+Set-GPRegistryValue -Name $gpoName -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders" -ValueName "MyDocuments" -Type ExpandString -Value "%HOMEDRIVE%%HOMEPATH%\Documents"
+
+# Test GPO application
+gpresult /r

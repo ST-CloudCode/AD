@@ -1,0 +1,134 @@
+##Steps to Manage Directory Objects on Azure Using PowerShell
+###Task 1: Install and Configure Azure PowerShell
+
+Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+Login to Azure
+Authenticate with your Azure account:
+Connect-AzAccount
+
+###Task 2: Manage Azure AD Users
+
+List All Azure AD Users
+Retrieve a list of all users in your Azure AD tenant:
+Get-AzADUser
+
+Create a New Azure AD User
+Add a new user to Azure AD:
+$user = New-AzADUser -DisplayName "John Doe" `
+                      -UserPrincipalName "john.doe@yourdomain.com" `
+                      -AccountEnabled $true `
+                      -PasswordProfile @{ ForceChangePasswordNextSignIn = $true; Password = "P@ssw0rd123" } `
+                      -GivenName "John" `
+                      -Surname "Doe" `
+                      -MailNickName "jdoe"
+Update an Azure AD User
+Modify properties of an existing user:
+Set-AzADUser -ObjectId "john.doe@yourdomain.com" -JobTitle "Senior Developer"
+
+Remove an Azure AD User
+Delete a user from Azure AD:
+Remove-AzADUser -ObjectId "john.doe@yourdomain.com"
+
+###Task 3: Manage Azure AD Groups
+
+List All Azure AD Groups
+Retrieve a list of all groups in your Azure AD tenant:
+Get-AzADGroup
+
+Create a New Azure AD Group
+Add a new group to Azure AD:
+$group = New-AzADGroup -DisplayName "Developers" `
+                        -MailNickname "developers" `
+                        -SecurityEnabled $true
+
+Update an Azure AD Group
+Modify properties of an existing group:
+Set-AzADGroup -ObjectId "developers" -DisplayName "Development Team"
+
+Remove an Azure AD Group
+Delete a group from Azure AD:
+Remove-AzADGroup -ObjectId "developers"
+
+### Task 4: Manage Azure AD Group Memberships
+
+Add a User to a Group
+Add-AzADGroupMember -GroupObjectId "GroupObjectId" -MemberObjectId "UserObjectId"
+
+Remove a User from a Group
+Remove-AzADGroupMember -GroupObjectId "GroupObjectId" -MemberObjectId "UserObjectId"
+
+###Task 5: Manage Azure AD Service Principals
+
+Retrieve a list of all service principals in your Azure AD tenant:
+Get-AzADServicePrincipal
+
+Create a New Azure AD Service Principal
+$sp = New-AzADServicePrincipal -DisplayName "MyApp" -Password "P@ssw0rd123" -Scope "https://graph.microsoft.com/.default"
+
+Modify properties of an existing service principal:
+Set-AzADServicePrincipal -ObjectId "ServicePrincipalObjectId" -DisplayName "MyUpdatedApp"
+
+Remove an Azure AD Service Principal
+Delete a service principal:
+Remove-AzADServicePrincipal -ObjectId "ServicePrincipalObjectId"
+
+# Manage-ADUsers.ps1
+
+# Connect to Azure
+Connect-AzAccount
+
+# List all users
+Get-AzADUser
+
+# Create a new user
+New-AzADUser -DisplayName "John Doe" `
+              -UserPrincipalName "john.doe@yourdomain.com" `
+              -AccountEnabled $true `
+              -PasswordProfile @{ ForceChangePasswordNextSignIn = $true; Password = "P@ssw0rd123" } `
+              -GivenName "John" `
+              -Surname "Doe" `
+              -MailNickName "jdoe"
+
+# Update a user
+Set-AzADUser -ObjectId "john.doe@yourdomain.com" -JobTitle "Senior Developer"
+
+# Remove a user
+Remove-AzADUser -ObjectId "john.doe@yourdomain.com"
+
+# Manage-ADGroups.ps1
+
+# Connect to Azure
+Connect-AzAccount
+
+# List all groups
+Get-AzADGroup
+
+# Create a new group
+New-AzADGroup -DisplayName "Developers" `
+                -MailNickname "developers" `
+                -SecurityEnabled $true
+
+# Update a group
+Set-AzADGroup -ObjectId "developers" -DisplayName "Development Team"
+
+# Remove a group
+Remove-AzADGroup -ObjectId "developers"
+
+# Manage-ADServicePrincipals.ps1
+
+# Connect to Azure
+Connect-AzAccount
+
+# List all service principals
+Get-AzADServicePrincipal
+
+# Create a new service principal
+New-AzADServicePrincipal -DisplayName "MyApp" -Password "P@ssw0rd123" -Scope "https://graph.microsoft.com/.default"
+
+# Update a service principal
+Set-AzADServicePrincipal -ObjectId "ServicePrincipalObjectId" -DisplayName "MyUpdatedApp"
+
+# Remove a service principal
+Remove-AzADServicePrincipal -ObjectId "ServicePrincipalObjectId"

@@ -1,0 +1,58 @@
+# Force Update Using Group Policy on Azure Using PowerShell
+
+## Steps to Implement
+
+```powershell
+# 1. Install Azure PowerShell Module (if not already installed)
+Install-Module -Name Az -AllowClobber -Force
+
+# 2. Connect to Your Azure Account (if using Azure AD)
+Connect-AzAccount
+
+# 3. For Intune (Azure AD-joined Devices)
+# Create a PowerShell script for Intune that will force policy updates on login
+$scriptContent = @"
+# Force a policy update on next login
+Start-Process -FilePath "powershell.exe" -ArgumentList "-Command `"(New-Object -ComObject shell.application).Logoff()`"" -Verb RunAs
+"@
+
+# Save the script content to a .ps1 file
+$scriptPath = "$env:TEMP\ForcePolicyUpdateOnLogin.ps1"
+Set-Content -Path $scriptPath -Value $scriptContent
+
+# Upload the script to Intune
+# Note: Use the Microsoft Graph API or Intune PowerShell SDK to deploy the script to devices.
+
+# 4. For On-Premises Active Directory Group Policy
+# Create a logon script that forces a policy update
+$logonScriptContent = @"
+# Force a Group Policy update on login
+gpupdate /force
+"@
+
+# Path to store the logon script (e.g., on a network share accessible by users)
+$logonScriptPath = "\\YourDomainController\SysVol\YourDomain\Scripts\ForcePolicyUpdateOnLogin.bat"
+Set-Content -Path $logonScriptPath -Value $logonScriptContent
+
+# Configure Group Policy to run the logon script
+Import-Module GroupPolicy
+$gpoName = "Force Policy Update on Login"
+$gpo = New-GPO -Name $gpoName -Comment "GPO to force policy update on user login"
+$gpoId = $gpo.Id
+Set-GPRegistryValue -Name $gpoName -Key "HKCU\Software\Microsoft\Windows\CurrentVersion\Policies\System" -ValueName "ScriptsLogon" -Type String -Value $logonScriptPath
+
+# Link the GPO to an Organizational Unit (OU)
+$ou = "OU=YourOU,DC=domain,DC=com"
+New-GPLink -Name $gpoName -Target $ou
+
+# 5. Verify the Update
+# For Intune
+# Check the deployment status of the script (use Intune PowerShell SDK or Graph API)
+
+# For on-premises GPO
+# Verify the GPO link and script application
+Get-GPOReport -Name $gpoName -ReportType HTML -Path "$env:TEMP\$gpoName.html"
+Start-Process "$env:TEMP\$gpoName.html"
+
+# 6. Document and Share Configuration
+# Document and share configuration details as needed.

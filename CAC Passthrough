@@ -1,0 +1,42 @@
+# CAC Passthrough Implementation on Azure Using PowerShell
+
+## Steps to Implement CAC Passthrough
+
+```powershell
+# 1. Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+# 2. Connect to Your Azure Account
+Connect-AzAccount
+
+# 3. Create an Azure AD Application
+$app = New-AzADApplication -DisplayName "CACPassthroughApp" -IdentifierUris "https://localhost" -ReplyUrls "https://localhost"
+
+# 4. Create a Service Principal
+$sp = New-AzADServicePrincipal -ApplicationId $app.ApplicationId -Scope "https://graph.microsoft.com/.default" -Role "Contributor"
+
+# 5. Create and Upload a Certificate
+$cert = New-SelfSignedCertificate -DnsName "CACPassthroughCert" -CertStoreLocation "Cert:\CurrentUser\My"
+$certFile = "$env:TEMP\CACPassthroughCert.pfx"
+Export-PfxCertificate -Cert $cert -FilePath $certFile -Password (ConvertTo-SecureString -String "YourPfxPassword" -Force -AsPlainText)
+
+$certBytes = [System.IO.File]::ReadAllBytes($certFile)
+$base64Cert = [System.Convert]::ToBase64String($certBytes)
+
+New-AzADApplicationCertificate -ApplicationId $app.ApplicationId -CertificateValue $base64Cert -StartDate (Get-Date) -EndDate (Get-Date).AddYears(1) -Type "AsymmetricX509Cert"
+
+# 6. Configure Authentication Settings
+$app = Get-AzADApplication -DisplayName "CACPassthroughApp"
+Set-AzADApplication -ApplicationId $app.ApplicationId -ReplyUrls "https://localhost"
+
+# 7. Setup Federation Services (If Applicable)
+# Note: This typically involves additional configuration outside of PowerShell.
+
+# 8. Install CAC Middleware
+# Note: Install and configure CAC middleware as per the documentation. This step usually involves manual setup or installation scripts specific to the middleware.
+
+# 9. Test Authentication
+# Note: Direct testing through PowerShell is limited. Test in a browser or application that supports CAC.
+
+# 10. Monitor and Troubleshoot
+Get-AzAuditLog -StartTime (Get-Date).AddDays(-1) -EndTime (Get-Date)

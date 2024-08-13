@@ -1,0 +1,144 @@
+##Steps to Deploy and Manage AD CS and Certificates on Azure Using PowerShell
+###Task 1: Set Up a Virtual Machine and Install AD CS
+
+Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+Login to Azure
+Authenticate with your Azure account:
+Connect-AzAccount
+
+Create a Resource Group
+Create a resource group if you don’t already have one:
+$resourceGroupName = "myCertResourceGroup"
+$location = "EastUS"
+
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+
+Create a Virtual Network and Subnet
+$vnetName = "myCertVNet"
+$subnetName = "myCertSubnet"
+
+$vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName `
+                             -Location $location `
+                             -Name $vnetName `
+                             -AddressPrefix "10.0.0.0/16"
+
+$subnet = Add-AzVirtualNetworkSubnetConfig -Name $subnetName `
+                                            -AddressPrefix "10.0.1.0/24" `
+                                            -VirtualNetwork $vnet
+
+$vnet | Set-AzVirtualNetwork
+
+Deploy a VM that will host the AD CS role:
+$vmName = "myCertVM"
+$nicName = "myCertNic"
+$publicIpName = "myCertPublicIP"
+$adminUsername = "azureuser"
+$adminPassword = "Password1234!"
+
+# Create Public IP Address
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName `
+                      -Name $publicIpName `
+                      -Location $location `
+                      -AllocationMethod Static
+
+# Create Network Interface
+$publicIp = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName
+$nic = New-AzNetworkInterface -ResourceGroupName $resourceGroupName `
+                               -Location $location `
+                               -Name $nicName `
+                               -SubnetId $vnet.Subnets[0].Id `
+                               -PublicIpAddressId $publicIp.Id
+
+# Create Virtual Machine
+New-AzVM -ResourceGroupName $resourceGroupName `
+          -Location $location `
+          -Name $vmName `
+          -VirtualNetworkId $vnet.Id `
+          -SubnetId $vnet.Subnets[0].Id `
+          -NetworkInterfaceId $nic.Id `
+          -ImageName "Win2022Datacenter" `
+          -Size "Standard_DS2_v2" `
+          -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+
+
+Connect to the VM and install the AD CS role:
+$session = New-PSSession -ComputerName $vmName -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    Install-WindowsFeature AD-Certificate -IncludeManagementTools
+
+    Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -CACommonName "Contoso CA" -CryptoProviderName "RSA#Microsoft Software Key Storage Provider"
+}
+Remove-PSSession $session
+
+### Task 2: Configure Certificate Templates
+
+Connect to the CA server and configure certificate templates:
+$session = New-PSSession -ComputerName $vmName -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    Import-Module AdcsDeployment
+
+    # Create a new certificate template
+    New-CertificateTemplate -Name "WebServerTemplate" -SubjectName "CN=Web Server" -KeySpec "KeyExchange" -KeyLength 2048 -ValidityPeriod "Years" -ValidityPeriodLength 2
+
+    # Publish the certificate template
+    Publish-CertificateTemplate -Name "WebServerTemplate"
+}
+Remove-PSSession $session
+
+### Task 3: Issue and Manage Certificates
+
+Request and issue a certificate:
+$certRequest = New-Object -TypeName Microsoft.CertificateServices.CertificateRequest
+$certRequest.CertificateTemplate = "WebServerTemplate"
+$certRequest.SubjectName = "CN=webserver.contoso.com"
+$certRequest.KeyUsage = "DigitalSignature, KeyEncipherment"
+
+$certRequest.CreateRequest() | Out-File "WebServerCertRequest.req"
+After generating the request file, you can use it to submit the request to the CA for issuance.
+
+List certificates and manage them:
+Get-ChildItem -Path Cert:\LocalMachine\My
+
+# Revoke a certificate
+$cert = Get-ChildItem -Path Cert:\LocalMachine\My | Where-Object { $_.Subject -eq "CN=webserver.contoso.com" }
+Revoke-Certificate -Certificate $cert -Reason "KeyCompromise"
+
+# Setup-ADCS.ps1
+
+# Connect to Azure
+Connect-AzAccount
+
+# Variables
+$resourceGroupName = "myCertResourceGroup"
+$location = "EastUS"
+$vnetName = "myCertVNet"
+$subnetName = "myCertSubnet"
+$vmName = "myCertVM"
+$adminUsername = "azureuser"
+$adminPassword = "Password1234!"
+
+# Create Resource Group
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+
+# Create Virtual Network and Subnet
+$vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $vnetName -AddressPrefix "10.0.0.0/16"
+$subnet = Add-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix "10.0.1.0/24" -VirtualNetwork $vnet
+$vnet | Set-AzVirtualNetwork
+
+# Create Public IP Address
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name "myCertPublicIP" -Location $location -AllocationMethod Static
+
+# Create Network Interface
+$publicIp = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name "myCertPublicIP"
+$nic = New-AzNetworkInterface -ResourceGroupName $resourceGroupName -Location $location -Name "myCertNic" -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $publicIp.Id
+
+# Create Virtual Machine
+New-AzVM -ResourceGroupName $resourceGroupName -Location $location -Name $vmName -VirtualNetworkId $vnet.Id -SubnetId $vnet.Subnets[0].Id -NetworkInterfaceId $nic.Id -ImageName "Win2022Datacenter" -Size "Standard_DS2_v2" -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+
+# Install AD CS and configure CA
+$session = New-PSSession -ComputerName $vmName -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    Install-WindowsFeature AD-Certificate -IncludeManagementTools
+    Install-AdcsCertificationAuthority -CAType EnterpriseRootCA -CACommonName "Contoso

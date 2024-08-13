@@ -1,0 +1,143 @@
+## Steps to Monitor, Manage, and Recover AD DS on Azure Using PowerShell
+### Task 1: Monitor AD DS
+
+Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+Login to Azure
+Authenticate with your Azure account:
+Connect-AzAccount
+
+Monitor AD DS Health
+Use the Azure AD DS PowerShell module to check the health of your AD DS instance. You might need to install the module first:
+Install-Module -Name AzureAD -AllowClobber -Force
+
+Check the status of your Azure AD DS instance:
+# Connect to Azure AD
+Connect-AzureAD
+
+# Get Azure AD DS instance status
+Get-AzureADDomainService
+
+Monitor Replication Status
+For on-premises AD DS, use the repadmin tool to monitor replication:
+# Check replication status
+repadmin /replsummary
+
+For Azure AD DS, you typically monitor replication using Azure portal metrics or built-in monitoring tools.
+
+Check event logs on your AD DS servers for any issues:
+# Query event logs for AD DS related events
+Get-WinEvent -LogName "Directory Service" | Format-Table -AutoSize
+
+### Task 2: Manage AD DS
+
+If you need to install the AD DS role on a new server:
+Install-WindowsFeature -Name AD-Domain-Services
+
+Promote a server to a domain controller:
+# Define domain and credentials
+$domainName = "contoso.com"
+$safeModePassword = ConvertTo-SecureString "YourSafeModePassword" -AsPlainText -Force
+$credential = Get-Credential
+
+# Install the domain controller
+Install-ADDSDomainController -DomainName $domainName -SafeModeAdministratorPassword $safeModePassword -Credential $credential -InstallDNS -NoGlobalCatalog:$false -Force
+
+Create and manage users and groups:
+# Create a new user
+New-ADUser -Name "John Doe" -GivenName "John" -Surname "Doe" -UserPrincipalName "johndoe@contoso.com" -Path "OU=Users,DC=contoso,DC=com" -AccountPassword (ConvertTo-SecureString "UserPassword123!" -AsPlainText -Force) -Enabled $true
+
+# Create a new group
+New-ADGroup -Name "Marketing" -GroupScope Global -Path "OU=Groups,DC=contoso,DC=com"
+
+# Add user to group
+Add-ADGroupMember -Identity "Marketing" -Members "johndoe"
+
+Update Group Policies
+# Import and apply Group Policy settings
+Import-GPO -BackupId "BackupID" -Path "\\path\to\backup" -TargetName "Default Domain Policy"
+
+# Refresh group policies
+gpupdate /force
+
+### Task 3: Recover AD DS
+
+Perform a Non-Authoritative Restore
+If you need to restore a domain controller without overriding current data:
+# Boot into Directory Services Restore Mode (DSRM)
+# Perform the restore process manually or using Windows Server Backup
+
+Perform an Authoritative Restore
+If you need to restore specific AD DS objects:
+# Boot into Directory Services Restore Mode (DSRM)
+# Use the ntdsutil tool for authoritative restore
+ntdsutil
+activate instance ntds
+authoritative restore
+restore object "CN=UserName,OU=Users,DC=contoso,DC=com"
+
+Restore from Azure Backup
+If you are using Azure Backup for AD DS:
+# Restore Azure VM containing the AD DS role
+# Use Azure portal or PowerShell commands to restore VM from backup
+
+# Monitor-ADDS.ps1
+
+# Import AzureAD module
+Import-Module AzureAD
+
+# Connect to Azure AD
+Connect-AzureAD
+
+# Get Azure AD DS instance status
+Get-AzureADDomainService
+
+# Check replication status (for on-premises AD DS)
+repadmin /replsummary
+
+# Query event logs for AD DS related events
+Get-WinEvent -LogName "Directory Service" | Format-Table -AutoSize
+
+# Manage-ADDS.ps1
+
+# Install AD DS Role
+Install-WindowsFeature -Name AD-Domain-Services
+
+# Define domain and credentials
+$domainName = "contoso.com"
+$safeModePassword = ConvertTo-SecureString "YourSafeModePassword" -AsPlainText -Force
+$credential = Get-Credential
+
+# Install the domain controller
+Install-ADDSDomainController -DomainName $domainName -SafeModeAdministratorPassword $safeModePassword -Credential $credential -InstallDNS -NoGlobalCatalog:$false -Force
+
+# Create a new user
+New-ADUser -Name "John Doe" -GivenName "John" -Surname "Doe" -UserPrincipalName "johndoe@contoso.com" -Path "OU=Users,DC=contoso,DC=com" -AccountPassword (ConvertTo-SecureString "UserPassword123!" -AsPlainText -Force) -Enabled $true
+
+# Create a new group
+New-ADGroup -Name "Marketing" -GroupScope Global -Path "OU=Groups,DC=contoso,DC=com"
+
+# Add user to group
+Add-ADGroupMember -Identity "Marketing" -Members "johndoe"
+
+# Import and apply Group Policy settings
+Import-GPO -BackupId "BackupID" -Path "\\path\to\backup" -TargetName "Default Domain Policy"
+
+# Refresh group policies
+gpupdate /force
+
+# Recover-ADDS.ps1
+
+# Non-authoritative Restore
+# Boot into Directory Services Restore Mode (DSRM)
+# Perform the restore process manually or using Windows Server Backup
+
+# Authoritative Restore
+ntdsutil
+activate instance ntds
+authoritative restore
+restore object "CN=UserName,OU=Users,DC=contoso,DC=com"
+
+# Restore from Azure Backup
+# Restore Azure VM containing the AD DS role

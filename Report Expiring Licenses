@@ -1,0 +1,51 @@
+# Report Licenses That Are 30 Days from Expiration on Azure Using PowerShell
+
+## Steps to Implement
+
+```powershell
+# 1. Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+# 2. Connect to Azure AD
+Connect-AzAccount
+
+# 3. Install Microsoft Graph PowerShell Module
+Install-Module -Name Microsoft.Graph -AllowClobber -Force
+
+# 4. Authenticate with Microsoft Graph
+Connect-MgGraph
+
+# 5. Fetch License Details
+# Retrieve the list of users and their assigned licenses
+$users = Get-MgUser -ExpandProperty LicenseDetails -Select Id,DisplayName
+
+# Initialize an empty array to hold license expiration data
+$licenseData = @()
+
+foreach ($user in $users) {
+    # Retrieve license details for the user
+    $licenses = Get-MgUserLicenseDetail -UserId $user.Id
+
+    foreach ($license in $licenses) {
+        $licenseData += [pscustomobject]@{
+            UserName = $user.DisplayName
+            License = $license.SkuId
+            ExpirationDate = $license.ExpirationDate
+        }
+    }
+}
+
+# Filter licenses that are 30 days from expiration
+$today = Get-Date
+$thresholdDate = $today.AddDays(30)
+$expiringLicenses = $licenseData | Where-Object { $_.ExpirationDate -lt $thresholdDate -and $_.ExpirationDate -ge $today }
+
+# Output the expiring licenses
+$expiringLicenses | Format-Table -AutoSize
+
+# 6. Export Results to a CSV File
+$csvPath = "C:\Path\To\Your\Report\ExpiringLicenses.csv"
+$expiringLicenses | Export-Csv -Path $csvPath -NoTypeInformation
+
+# 7. Document and Share the Report
+# Document and share configuration details as needed.

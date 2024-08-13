@@ -1,0 +1,182 @@
+##Steps to Implement and Administer AD FS on Azure Using PowerShell
+##Task 1: Deploy a Virtual Machine for AD FS
+
+Install Azure PowerShell Module
+Install-Module -Name Az -AllowClobber -Force
+
+Login to Azure
+Authenticate with your Azure account:
+Connect-AzAccount
+
+Create a Resource Group
+$resourceGroupName = "myADFSResourceGroup"
+$location = "EastUS"
+
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+
+Create a Virtual Network and Subnet
+$vnetName = "myADFSVNet"
+$subnetName = "myADFSSubnet"
+
+$vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName `
+                             -Location $location `
+                             -Name $vnetName `
+                             -AddressPrefix "10.0.0.0/16"
+
+$subnet = Add-AzVirtualNetworkSubnetConfig -Name $subnetName `
+                                            -AddressPrefix "10.0.1.0/24" `
+                                            -VirtualNetwork $vnet
+
+$vnet | Set-AzVirtualNetwork
+
+Deploy a VM that will host the AD FS role:
+$vmName = "myADFSVM"
+$nicName = "myADFSNic"
+$publicIpName = "myADFSPublicIP"
+$adminUsername = "azureuser"
+$adminPassword = "Password1234!"
+
+# Create Public IP Address
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName `
+                      -Name $publicIpName `
+                      -Location $location `
+                      -AllocationMethod Static
+
+# Create Network Interface
+$publicIp = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name $publicIpName
+$nic = New-AzNetworkInterface -ResourceGroupName $resourceGroupName `
+                               -Location $location `
+                               -Name $nicName `
+                               -SubnetId $vnet.Subnets[0].Id `
+                               -PublicIpAddressId $publicIp.Id
+
+# Create Virtual Machine
+New-AzVM -ResourceGroupName $resourceGroupName `
+          -Location $location `
+          -Name $vmName `
+          -VirtualNetworkId $vnet.Id `
+          -SubnetId $vnet.Subnets[0].Id `
+          -NetworkInterfaceId $nic.Id `
+          -ImageName "Win2022Datacenter" `
+          -Size "Standard_DS2_v2" `
+          -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+
+### Task 2: Install and Configure AD FS
+
+Connect to the VM and install AD FS:
+$session = New-PSSession -ComputerName $vmName -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    Install-WindowsFeature ADFS -IncludeManagementTools
+    Install-WindowsFeature ADFS-Web -IncludeManagementTools
+}
+
+Configure AD FS
+Run the AD FS configuration wizard:
+Invoke-Command -Session $session -ScriptBlock {
+    $certThumbprint = "<YourCertificateThumbprint>"
+
+    # Configure AD FS
+    Install-AdfsFarm -CertificateThumbprint $certThumbprint `
+                      -FederationServiceName "adfs.contoso.com" `
+                      -ServiceAccountCredential (Get-Credential) `
+                      -GroupServiceAccountCredential (Get-Credential) `
+                      -DatabaseServer "localhost" `
+                      -DatabaseName "AdfsConfigDB"
+}
+
+Ensure you replace <YourCertificateThumbprint> with the actual thumbprint of your SSL certificate.
+
+Configure AD FS Relying Party Trust
+Invoke-Command -Session $session -ScriptBlock {
+    Add-AdfsRelyingPartyTrust -Name "MyApp" `
+                             -MetadataFile "https://myapp.com/federationmetadata/2007-06/federationmetadata.xml"
+}
+
+Configure AD FS Claim Rules
+Invoke-Command -Session $session -ScriptBlock {
+    $rules = @"
+    <RelyingPartyTrust>
+        <ClaimsProvider>
+            <ClaimType Id="http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress">
+                <DisplayName>Email</DisplayName>
+            </ClaimType>
+        </ClaimsProvider>
+    </RelyingPartyTrust>
+    "@
+    Set-AdfsRelyingPartyTrust -TargetName "MyApp" -IssuanceTransformRules $rules
+}
+
+### Task 3: Manage AD FS
+
+Manage AD FS Services
+Start, stop, or restart AD FS services:
+Invoke-Command -Session $session -ScriptBlock {
+    Restart-Service adfssrv
+}
+
+Verify AD FS Configuration
+Invoke-Command -Session $session -ScriptBlock {
+    Get-AdfsProperties
+    Get-AdfsRelyingPartyTrust
+}
+
+# Deploy-ADFS.ps1
+
+# Connect to Azure
+Connect-AzAccount
+
+# Variables
+$resourceGroupName = "myADFSResourceGroup"
+$location = "EastUS"
+$vnetName = "myADFSVNet"
+$subnetName = "myADFSSubnet"
+$vmName = "myADFSVM"
+$adminUsername = "azureuser"
+$adminPassword = "Password1234!"
+
+# Create Resource Group
+New-AzResourceGroup -Name $resourceGroupName -Location $location
+
+# Create Virtual Network and Subnet
+$vnet = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $vnetName -AddressPrefix "10.0.0.0/16"
+$subnet = Add-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix "10.0.1.0/24" -VirtualNetwork $vnet
+$vnet | Set-AzVirtualNetwork
+
+# Create Public IP Address
+New-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name "myADFSPublicIP" -Location $location -AllocationMethod Static
+
+# Create Network Interface
+$publicIp = Get-AzPublicIpAddress -ResourceGroupName $resourceGroupName -Name "myADFSPublicIP"
+$nic = New-AzNetworkInterface -ResourceGroupName $resourceGroupName -Location $location -Name "myADFSNic" -SubnetId $vnet.Subnets[0].Id -PublicIpAddressId $publicIp.Id
+
+# Create Virtual Machine
+New-AzVM -ResourceGroupName $resourceGroupName -Location $location -Name $vmName -VirtualNetworkId $vnet.Id -SubnetId $vnet.Subnets[0].Id -NetworkInterfaceId $nic.Id -ImageName "Win2022Datacenter" -Size "Standard_DS2_v2" -Credential (New-Object PSCredential ($adminUsername, (ConvertTo-SecureString $adminPassword -AsPlainText -Force)))
+
+
+# Configure-ADFS.ps1
+
+# Connect to the VM
+$session = New-PSSession -ComputerName "myADFSVM" -Credential (New-Object PSCredential ("azureuser", (ConvertTo-SecureString "Password1234!" -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    Install-WindowsFeature ADFS -IncludeManagementTools
+    Install-WindowsFeature ADFS-Web -IncludeManagementTools
+
+    # Configure AD FS
+    Install-AdfsFarm -CertificateThumbprint "<YourCertificateThumbprint>" -FederationServiceName "adfs.contoso.com" -ServiceAccountCredential (Get-Credential) -GroupServiceAccountCredential (Get-Credential) -DatabaseServer "localhost" -DatabaseName "AdfsConfigDB"
+}
+Remove-PSSession $session
+
+
+# Manage-ADFS.ps1
+
+# Connect to the VM
+$session = New-PSSession -ComputerName "myADFSVM" -Credential (New-Object PSCredential ("azureuser", (ConvertTo-SecureString "Password1234!" -AsPlainText -Force)))
+Invoke-Command -Session $session -ScriptBlock {
+    # Manage AD FS services
+    Restart-Service adfssrv
+
+    # Verify AD FS configuration
+    Get-AdfsProperties
+    Get-AdfsRelyingPartyTrust
+}
+Remove-PSSession $session
